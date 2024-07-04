@@ -102,7 +102,7 @@ export function render() {
 					const frame = videoFrames[index];
 					drawFrame(renderCtx, frame);
 					const duration = interval * 1000;
-					await encoder.encode(
+					encoder.encode(
 						new VideoFrame(renderCanvas, {
 							duration,
 							timestamp: timeoffset,
@@ -124,7 +124,7 @@ export function render() {
 					a.click();
 				}
 			};
-			const renderInterval = setInterval(renderFrame, interval);
+			const renderInterval = setInterval(renderFrame, 1);
 		});
 }
 
