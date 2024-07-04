@@ -12,7 +12,7 @@ let videoFrames: VideoFrame[] = [];
 let videoLoaded = useReactive({ obj: false });
 let isPlaying = false;
 
-export function render(container?: HTMLElement) {
+export function render() {
 	document.getElementById("container")!.innerHTML = /* html */ `
         <button id='play'>播放视频</button>
 		<button id='export'>导出视频</button>
@@ -159,8 +159,6 @@ document
 			const file = fileInput.files![0];
 			await demuxer.load(file);
 			const decoderConfig = await demuxer.getVideoDecoderConfig();
-
-			let isFirstFrame = true;
 
 			const decoder = new VideoDecoder({
 				output: (chunk) => {
