@@ -5,7 +5,7 @@ import { drawFrame } from "./shader";
 import { useReactive } from "./reactive";
 
 const demuxer = new WebDemuxer({
-	wasmLoaderPath: `${window.location.origin}/wasm-files/ffmpeg-mini.js`,
+	wasmLoaderPath: `${window.location.href}/wasm-files/ffmpeg-mini.js`,
 });
 
 let videoFrames: VideoFrame[] = [];
