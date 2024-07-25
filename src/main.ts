@@ -4,16 +4,85 @@ import { drawFrame } from "./shader";
 import { useReactive } from "./reactive";
 import { MP4Demuxer, MP4Muxer, stream2buffer } from "./mp4-utils";
 
+document.querySelector<HTMLDivElement>("#app")!.innerHTML = /* html */ `
+  <div>
+    <h1>WebCodecs Demo</h1>
+    <p>提示：仅支持 mp4，请使用 Chrome，目前 Firefox 对该 API 支持仍不足</p>
+    <input type='file' id='file' accept='video/mp4' style="${
+		/* css */ `
+        display: none;
+      `
+	}" />
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button id='add'>导入视频</button><div id='container'></div>
+    </div>
+    <br />
+    <canvas id='canvas' width='640' height='360' style="${
+		/* css */ `margin-top: 20px;
+    background-color: #000;
+    `
+	}"></canvas>
+  </div>
+`;
+
 let videoFrames: VideoFrame[] = [];
 let videoFrameQueue: VideoFrame[] = [];
 let videoLoaded = useReactive({ obj: false });
 let isPlaying = false;
 
+// 视频导入：包含解封装和解码
+document
+	.querySelector<HTMLButtonElement>("#add")!
+	.addEventListener("click", async () => {
+		const fileInput = document.querySelector<HTMLInputElement>("#file")!;
+		fileInput.click();
+		fileInput.addEventListener("change", async () => {
+			videoFrames = [];
+			const file = fileInput.files![0];
+
+			// 实例化一个 MP4Demuxer，用于解封装
+			new MP4Demuxer(file, {
+				onConfig(config) {
+					// 1. 配置解码器
+					console.log("config", config);
+					decoder.configure(config);
+				},
+				onChunk(chunk) {
+					// 2. 解码视频帧
+					console.log("chunk", chunk);
+					decoder.decode(chunk);
+				},
+				onDone() {
+					// 4.视频解封装完成
+					videoLoaded.obj = true;
+				},
+			});
+
+			const decoder = new VideoDecoder({
+				output: (chunk) => {
+					// 3. 将解码后的视频帧存入 videoFrames
+					// 从GPU内存中Copy出来，及时关闭原来的，防止显存炸裂
+					videoFrames.push(chunk.clone());
+					chunk.close();
+				},
+				error: (error) => {
+					console.error(error);
+				},
+			});
+		});
+	});
+
+/**
+ * 解码后渲染的元素
+ */
 export function render() {
+	// 渲染按钮
 	document.getElementById("container")!.innerHTML = /* html */ `
-        <button id='play'>播放视频</button>
-		<button id='export'>导出视频</button>
-    `;
+			<button id='play'>播放视频</button>
+			<button id='export'>导出视频</button>
+		`;
+
+	// 播放
 	document
 		.querySelector<HTMLButtonElement>("#play")!
 		.addEventListener("click", () => {
@@ -58,6 +127,8 @@ export function render() {
 
 			requestAnimationFrame(animate);
 		});
+
+	// 导出
 	document
 		.querySelector<HTMLButtonElement>("#export")!
 		.addEventListener("click", async () => {
@@ -79,7 +150,6 @@ export function render() {
 					}
 					console.log("add video chunk", chunk);
 					mp4Muxer.addVideoChunk(track_id, chunk);
-					// muxer.addVideoChunk(chunk, meta);
 				},
 				error: (error) => {
 					console.error(error);
@@ -133,59 +203,3 @@ export function render() {
 			const renderInterval = setInterval(renderFrame, 1);
 		});
 }
-
-document.querySelector<HTMLDivElement>("#app")!.innerHTML = /* html */ `
-  <div>
-    <h1>WebCodecs Demo</h1>
-    <p>提示：仅支持 mp4，请使用 Chrome，目前 Firefox 对该 API 支持仍不足</p>
-    <input type='file' id='file' accept='video/mp4' style="${
-		/* css */ `
-        display: none;
-      `
-	}" />
-    <div style="display:flex;gap:10px;justify-content:center;">
-      <button id='add'>导入视频</button><div id='container'></div>
-    </div>
-    <br />
-    <canvas id='canvas' width='640' height='360' style="${
-		/* css */ `margin-top: 20px;
-    background-color: #000;
-    `
-	}"></canvas>
-  </div>
-`;
-
-document
-	.querySelector<HTMLButtonElement>("#add")!
-	.addEventListener("click", async () => {
-		const fileInput = document.querySelector<HTMLInputElement>("#file")!;
-		fileInput.click();
-		fileInput.addEventListener("change", async () => {
-			videoFrames = [];
-			const file = fileInput.files![0];
-
-			const decoder = new VideoDecoder({
-				output: (chunk) => {
-					videoFrames.push(chunk.clone());
-					chunk.close();
-				},
-				error: (error) => {
-					console.error(error);
-				},
-			});
-
-			const demuxer = new MP4Demuxer(file, {
-				onConfig(config) {
-					console.log("config", config);
-					decoder.configure(config);
-				},
-				onChunk(chunk) {
-					console.log("chunk", chunk);
-					decoder.decode(chunk);
-				},
-				onDone() {
-					videoLoaded.obj = true;
-				},
-			});
-		});
-	});

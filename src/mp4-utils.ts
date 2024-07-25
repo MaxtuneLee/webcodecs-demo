@@ -1,6 +1,8 @@
 import * as MP4Box from "mp4box";
 
-// Wraps an MP4Box File as a WritableStream underlying sink.
+/**
+ * buffer 转换为 MP4Box file
+ */
 export class MP4FileSink {
 	#file: any | null = null;
 	#offset: number = 0;
@@ -26,8 +28,9 @@ export class MP4FileSink {
 	}
 }
 
-// Demuxes the first video track of an MP4 file using MP4Box, calling
-// `onConfig()` and `onChunk()` with appropriate WebCodecs objects.
+/**
+ * MP4 解封装器
+ */
 export class MP4Demuxer {
 	#onConfig: ((config: any) => void) | null = null;
 	#onChunk: ((chunk: any) => void) | null = null;
@@ -114,6 +117,7 @@ export class MP4Demuxer {
 	}
 }
 
+/** MP4封装器 */
 export class MP4Muxer {
 	#file: MP4Box.MP4File | null = null;
 	tracks: WeakMap<
