@@ -1,5 +1,4 @@
 import "./style.css";
-import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { drawFrame } from "./shader";
 import { useReactive } from "./reactive";
 import { MP4Demuxer, MP4Muxer, stream2buffer } from "./mp4-utils";
