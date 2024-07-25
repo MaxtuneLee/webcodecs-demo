@@ -197,7 +197,6 @@ export class MP4Muxer {
 
 		let firstMoofReady = false;
 		const deltaBuf = (): Uint8Array | null => {
-			// 避免 moov 未完成时写入文件，导致文件无法被识别
 			if (!firstMoofReady) {
 				if (boxes.find((box) => box.type === "moof") != null) {
 					firstMoofReady = true;
@@ -206,19 +205,16 @@ export class MP4Muxer {
 				}
 			}
 			if (sendedBoxIdx >= boxes.length) return null;
-
+		
 			const ds = new MP4Box.DataStream();
 			ds.endianness = MP4Box.DataStream.BIG_ENDIAN;
-
-			let i = sendedBoxIdx;
+		
 			try {
-				for (; i < boxes.length; ) {
-					boxes[i].write(ds);
-					delete boxes[i];
-					i += 1;
-				}
+				boxes[sendedBoxIdx].write(ds);
+				delete boxes[sendedBoxIdx];
+				sendedBoxIdx += 1;
 			} catch (err) {
-				const errBox = boxes[i];
+				const errBox = boxes[sendedBoxIdx];
 				if (err instanceof Error && errBox != null) {
 					throw Error(
 						`${err.message} | deltaBuf( boxType: ${
@@ -230,10 +226,7 @@ export class MP4Muxer {
 				}
 				throw err;
 			}
-
-			unsafeReleaseMP4BoxFile(file);
-
-			sendedBoxIdx = boxes.length;
+		
 			return new Uint8Array(ds.buffer);
 		};
 
@@ -246,7 +239,7 @@ export class MP4Muxer {
 					const d = deltaBuf();
 					console.log("video stream sending...", d);
 					if (d != null && !canceled) ctrl.enqueue(d);
-					if (d == null || stoped) exit?.();
+					if (sendedBoxIdx >= boxes.length || stoped) exit?.();
 				}, timeSlice);
 
 				exit = (err) => {
