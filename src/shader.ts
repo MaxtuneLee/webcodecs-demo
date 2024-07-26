@@ -1,4 +1,9 @@
-export function drawFrame(gl: WebGL2RenderingContext, frame: VideoFrame) {
+export function drawFrame(
+	gl: WebGL2RenderingContext,
+	frame: VideoFrame,
+	timestamp: number,
+	totalLength: number
+) {
 	const vsSource = `
         attribute vec4 aVertexPosition;
         attribute vec2 aTextureCoord;
@@ -9,13 +14,14 @@ export function drawFrame(gl: WebGL2RenderingContext, frame: VideoFrame) {
         }
     `;
 
-	const fsSource = `
+	const fsSource = () => {
+		return `
         precision highp float;
         varying highp vec2 vTextureCoord;
         uniform sampler2D uSampler;
         void main(void) {
             vec4 color = texture2D(uSampler, vTextureCoord);
-            if (vTextureCoord.x > 0.5) {
+            if (vTextureCoord.x > ${(timestamp + 0.01) / totalLength}) {
                 float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
                 gl_FragColor = vec4(vec3(gray), color.a);
             } else {
@@ -23,8 +29,11 @@ export function drawFrame(gl: WebGL2RenderingContext, frame: VideoFrame) {
             }
         }
     `;
+	};
 
-	const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+	console.log(timestamp, totalLength);
+
+	const shaderProgram = initShaderProgram(gl, vsSource, fsSource());
 	const programInfo = {
 		program: shaderProgram,
 		attribLocations: {

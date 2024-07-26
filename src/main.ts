@@ -120,7 +120,7 @@ export function render() {
 
 			const play = async () => {
 				const frame = videoFrames[index];
-				drawFrame(gl, frame);
+				drawFrame(gl, frame, index, videoFrames.length);
 				index++;
 			};
 
@@ -135,7 +135,7 @@ export function render() {
 			let track_id = -1;
 			const encoder = new VideoEncoder({
 				output: async (chunk, meta) => {
-					if (track_id === -1 && meta != null) {
+					if (track_id < 1 && meta != null) {
 						const videoMuxConfig = {
 							timescale: 1e6,
 							width: 1920,
@@ -158,7 +158,7 @@ export function render() {
 				codec: "avc1.4D0032",
 				width: 1920,
 				height: 1080,
-				bitrate: 80000000,
+				bitrate: 25000000,
 				framerate: 24,
 			});
 			const renderCanvas = new OffscreenCanvas(1920, 1080);
@@ -175,7 +175,7 @@ export function render() {
 			const renderFrame = async () => {
 				if (index < videoFrames.length) {
 					const frame = videoFrames[index];
-					drawFrame(renderCtx, frame);
+					drawFrame(renderCtx, frame, index, videoFrames.length);
 					const duration = interval * 1000;
 					const queuedFrame = new VideoFrame(renderCanvas, {
 						duration,
