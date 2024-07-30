@@ -1,6 +1,7 @@
 export function drawFrame(
 	gl: WebGL2RenderingContext,
 	frame: VideoFrame,
+	effectFrame: VideoFrame,
 	timestamp: number,
 	totalLength: number
 ) {
@@ -16,19 +17,21 @@ export function drawFrame(
 
 	const fsSource = () => {
 		return `
-        precision highp float;
-        varying highp vec2 vTextureCoord;
-        uniform sampler2D uSampler;
-        void main(void) {
-            vec4 color = texture2D(uSampler, vTextureCoord);
-            if (vTextureCoord.x > ${(timestamp + 0.01) / totalLength}) {
-                float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-                gl_FragColor = vec4(vec3(gray), color.a);
-            } else {
-                gl_FragColor = color;
+            precision highp float;
+            varying highp vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform sampler2D effect_sampler;
+            void main(void) {
+                vec4 color = texture2D(uSampler, vTextureCoord);
+                vec4 effect_color = texture2D(effect_sampler, vTextureCoord);
+                if (vTextureCoord.x > ${(timestamp + 0.01) / totalLength}) {
+                    float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                    gl_FragColor = mix(vec4(vec3(gray), color.a), effect_color, effect_color.a);
+                } else {
+                    gl_FragColor = mix(color, effect_color, effect_color.a);
+                }
             }
-        }
-    `;
+        `;
 	};
 
 	console.log(timestamp, totalLength);
@@ -45,12 +48,17 @@ export function drawFrame(
 		},
 		uniformLocations: {
 			uSampler: gl.getUniformLocation(shaderProgram, "uSampler"),
+			effect_sampler: gl.getUniformLocation(
+				shaderProgram,
+				"effect_sampler"
+			),
 		},
 	};
 	const buffers = initBuffers(gl);
 	const texture = createTexture(gl, frame);
+	const effectTexture = createTexture(gl, effectFrame);
 	gl.clear(gl.COLOR_BUFFER_BIT);
-	drawScene(gl, programInfo, buffers, texture);
+	drawScene(gl, programInfo, buffers, texture, effectTexture);
 }
 
 function initShaderProgram(
@@ -111,7 +119,6 @@ function initBuffers(gl: WebGL2RenderingContext) {
 	const textureCoordBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
 
-	// 调整纹理坐标，使视频不再反转
 	const textureCoordinates = new Float32Array([
 		1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0,
 	]);
@@ -134,8 +141,8 @@ function createTexture(
 		gl.TEXTURE_2D,
 		0,
 		gl.RGBA,
-		frame.displayWidth,
-		frame.displayHeight,
+		frame?.displayWidth ?? 1920,
+		frame?.displayHeight ?? 1080,
 		0,
 		gl.RGBA,
 		gl.UNSIGNED_BYTE,
@@ -152,7 +159,8 @@ function drawScene(
 	gl: WebGL2RenderingContext,
 	programInfo: any,
 	buffers: any,
-	texture: WebGLTexture
+	texture: WebGLTexture,
+	effectTexture: WebGLTexture
 ) {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -188,6 +196,10 @@ function drawScene(
 	gl.activeTexture(gl.TEXTURE0);
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 	gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
+
+	gl.activeTexture(gl.TEXTURE1);
+	gl.bindTexture(gl.TEXTURE_2D, effectTexture);
+	gl.uniform1i(programInfo.uniformLocations.effect_sampler, 1);
 
 	gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 }

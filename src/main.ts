@@ -2,6 +2,7 @@ import "./style.css";
 import { drawFrame } from "./shader";
 import { useReactive } from "./reactive";
 import { MP4Demuxer, MP4Muxer, stream2buffer } from "./mp4-utils";
+import { createChromakey } from "./chromakey";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = /* html */ `
   <div>
@@ -12,13 +13,18 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = /* html */ `
         display: none;
       `
 	}" />
+	<input type='file' id='chroma' accept='video/mp4' style="${
+		/* css */ `
+        display: none;
+      `
+	}" />
     <div style="display:flex;gap:10px;justify-content:center;">
-      <button id='add'>导入视频</button><div id='container'></div>
+      <button id='add'>导入视频</button><button id="chroma-key">导入特效</button><div id='container'></div>
     </div>
     <br />
     <canvas id='canvas' width='640' height='360' style="${
 		/* css */ `margin-top: 20px;
-    background-color: #000;
+    background-color: #00cad1;
     `
 	}"></canvas>
   </div>
@@ -28,6 +34,15 @@ let videoFrames: VideoFrame[] = [];
 let videoFrameQueue: VideoFrame[] = [];
 let videoLoaded = useReactive({ obj: false });
 let isPlaying = false;
+
+let chromaFrames: VideoFrame[] = [];
+const chromakey = createChromakey({
+	// 未设置 keyColor 默认取左上角第一个像素的颜色值
+	// keyColor: '#00FF00'
+	similarity: 0.18,
+	smoothness: 0.1,
+	spill: 0.2,
+});
 
 // 视频导入：包含解封装和解码
 document
@@ -71,6 +86,51 @@ document
 		});
 	});
 
+// 导入特效：包含解码和渲染
+document
+	.querySelector<HTMLButtonElement>("#chroma-key")!
+	.addEventListener("click", async () => {
+		const fileInput = document.querySelector<HTMLInputElement>("#chroma")!;
+		fileInput.click();
+		fileInput.addEventListener("change", async () => {
+			chromaFrames = [];
+			const file = fileInput.files![0];
+
+			// 实例化一个 MP4Demuxer，用于解封装
+			new MP4Demuxer(file, {
+				onConfig(config) {
+					// 1. 配置解码器
+					console.log("config", config);
+					decoder.configure(config);
+				},
+				onChunk(chunk) {
+					// 2. 解码视频帧
+					console.log("chunk", chunk);
+					decoder.decode(chunk);
+				},
+				onDone() {
+					// 4.视频解封装完成
+					console.log("chromaFrames", chromaFrames);
+				},
+			});
+
+			const decoder = new VideoDecoder({
+				output: (chunk) => {
+					// 3. 将解码后的视频帧存入 videoFrames
+					// 从GPU内存中Copy出来，及时关闭原来的，防止显存炸裂
+					chromakey(chunk).then((resFrame) => {
+						console.log(resFrame);
+						chromaFrames.push(new VideoFrame(resFrame));
+						chunk.close();
+					});
+				},
+				error: (error) => {
+					console.error(error);
+				},
+			});
+		});
+	});
+
 /**
  * 解码后渲染的元素
  */
@@ -102,6 +162,8 @@ export function render() {
 			let start: number | null = null;
 			let fps = 24; // 目标帧率
 			let interval = 1000 / fps; // 每帧间隔时间
+			let chromaIndex = 0;
+			console.log("chromaFrames", chromaIndex, chromaFrames.length);
 
 			function animate(timestamp: number) {
 				if (!start) start = timestamp;
@@ -120,8 +182,11 @@ export function render() {
 
 			const play = async () => {
 				const frame = videoFrames[index];
-				drawFrame(gl, frame, index, videoFrames.length);
+				const chromaFrame = chromaFrames[chromaIndex];
+				drawFrame(gl, frame, chromaFrame, index, videoFrames.length);
 				index++;
+				chromaIndex++;
+				if (chromaIndex >= chromaFrames.length) chromaIndex = 0;
 			};
 
 			requestAnimationFrame(animate);
@@ -170,12 +235,21 @@ export function render() {
 				return;
 			}
 			let index = 0;
+			let chromaIndex = 0;
 			let timeoffset = 0;
 			let interval = 1000 / 24;
 			const renderFrame = async () => {
+				console.log("renderFrame", index, videoFrames.length);
 				if (index < videoFrames.length) {
 					const frame = videoFrames[index];
-					drawFrame(renderCtx, frame, index, videoFrames.length);
+					const chromaFrame = chromaFrames[chromaIndex];
+					drawFrame(
+						renderCtx,
+						frame,
+						chromaFrame,
+						index,
+						videoFrames.length
+					);
 					const duration = interval * 1000;
 					const queuedFrame = new VideoFrame(renderCanvas, {
 						duration,
@@ -184,6 +258,8 @@ export function render() {
 					encoder.encode(queuedFrame);
 					timeoffset += duration;
 					index++;
+					chromaIndex++;
+					if (chromaIndex >= chromaFrames.length) chromaIndex = 0;
 				} else {
 					clearInterval(renderInterval);
 					await encoder.flush();
